@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[72]:
+
+
 import math
 import numpy as np
 import os
@@ -28,6 +34,10 @@ tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 os.environ['TF_DETERMINISTIC_OPS'] = '1'
 
+
+# In[73]:
+
+
 # Lists the GPU's recognized. Should have at least one GPU with CUDA compatibility
 # for increased training speed.
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
@@ -36,6 +46,9 @@ if len(physical_devices) > 0:
     
 print(physical_devices)
 print(tf.test.is_built_with_cuda())
+
+
+# In[74]:
 
 
 # Sets the distribution strategy for GPU 
@@ -47,6 +60,9 @@ mixed_precision.set_global_policy('mixed_float16')
 
 # Enables auto-clustering using XLA to increase computation speed.
 tf.config.optimizer.set_jit("autoclustering")
+
+
+# In[75]:
 
 
 # IMPORTANT: Set global parameters for the model's training and configuration
@@ -64,7 +80,11 @@ CUT_OUT_PROB = .5
 LEARNING_RATE = 3e-5
 
 
-# LOAD DATA
+# Load Data
+
+# In[76]:
+
+
 # Retrieves the number of data files from the directory
 def data_info_grabber(filenames):
     n = [int(re.compile(r'-([0-9]*)\.').search(filename).group(1)) for filename in filenames]
@@ -77,6 +97,9 @@ def data_info_grabber(filenames):
 def display_data(data_files):
     display(train.head())
     print(f'Train samples: {len(train)}')
+
+
+# In[77]:
 
 
 train = pd.read_csv(f'TFRecordGeneration.csv')
@@ -118,8 +141,14 @@ TRAINING_FILENAMES = (FILENAMES_COMP)
 TRAIN_IMG_AMT = data_info_grabber(TRAINING_FILENAMES)
 
 
-# AUGMENTATION
+# Augmentation
+
+# In[78]:
+
+
 # Data Augmentation Auxiliary Functions
+# 
+
 def randomize_parameters():
     return tf.random.uniform([], 0, 1.0, dtype=tf.float32)
 
@@ -221,8 +250,12 @@ def transform_shear(image, height, shear):
     return reshaped_val
 
 
+# In[79]:
+
+
 # Data Augmentation Functions that utilize the auxiliary functions above
 # Functions: Degree Rotation, Pixel Edits, Random Rotation, Shear, Flip, Cut Out
+
 def degree_rotate(image, rotate):
     if rotate > .75:
         image = tf.image.rot90(image, k=3) # rotate 270º
@@ -258,9 +291,12 @@ def flip_image(image, spatial):
         image = tf.image.transpose(image)
 
 
+# In[80]:
+
 
 # Performs data augmentation using the functions above.
 # Functions: Degree Rotation, Pixel Edits, Random Rotation, Shear, Flip, Cut Out
+
 def data_augment(image, label):
     rotation, spatial, rotate, p1, p2, p3, shear, crop, cutout = randomize_parameters(), randomize_parameters(), randomize_parameters(), randomize_parameters(), randomize_parameters(), randomize_parameters(), randomize_parameters()
     negative_transform = 1
@@ -278,6 +314,10 @@ def data_augment(image, label):
         image = data_augment_cutout(image)
         
     return image, label
+
+
+# In[81]:
+
 
 # Datasets utility functions
 def scale_image(image, label):
@@ -357,6 +397,10 @@ def get_dataset(FILENAMES, labeled=True, ordered=False, repeated=False,
     dataset = dataset.prefetch(AUTO)
     return dataset
 
+
+# In[82]:
+
+
 # Displays the dataset distribution of each class
 ds_dist = get_dataset(TRAINING_FILENAMES)
 labels_comp = [target.numpy() for img, target in iter(ds_dist.unbatch())]
@@ -368,8 +412,8 @@ ax.tick_params(labelsize=16)
 plt.show()
 
 
+# In[83]:
 
-# TRAINING
 
 # Set training parameters and creates the learning rate function that 
 # utilizes cosine learning rate schedule. A warm-up phase is utilizes 
@@ -398,6 +442,11 @@ def cosine_schedule_with_warmup(step, total_steps, warmup_steps=0, hold_max_step
             lr = tf.math.maximum(lr_min, float(lr))
 
     return lr
+
+
+# Model
+
+# In[84]:
 
 
 # Create the encoder model utilizing EfficientNetB3 with imagenet weights
@@ -429,7 +478,14 @@ def classifier_fn(input_shape, N_CLASSES, encoder, trainable=True):
 
     return model
 
+
+# Supervised Contrastive learning parameters
+
+# In[85]:
+
+
 # Auxiliary functions for Supervised Contrastive Learning Model
+
 temperature = 0.1
 
 # Supervised Contrastive Loss Function that utilizes labeled information
@@ -512,6 +568,12 @@ def train_classifier(encoder):
     model_path = f'model_scl_{fold}.h5'
     model.save_weights(model_path)
 
+
+# Training
+
+# In[86]:
+
+
 # Train the model:
 # First trains encoder, then trains classifier
 skf = KFold(n_splits=5, shuffle=True, random_state=SEED)
@@ -550,6 +612,10 @@ for fold,(train_split, validation_split) in enumerate(skf.split(np.arange(20))):
     x_oof = ds_valid.map(lambda image, target: image)
     oof_pred.append(np.argmax(model.predict(x_oof), axis=-1))
     oof_embed.append(encoder.predict(x_oof)) # OOF embeddings
+
+
+# In[ ]:
+
 
 # Display Out of Fold (OOF) metrics
 print(classification_report(y_reg_true, y_reg_pred, target_names=CLASSES))
